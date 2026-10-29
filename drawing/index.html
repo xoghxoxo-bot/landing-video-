@@ -207,11 +207,8 @@ function render(){
     queue.forEach(function(p,i){
       var away = p.st === '시합중';
       var isHit = q && norm(p.name).indexOf(q) > -1;
-      var eta = '';
-      if(away) eta = '<div class="eta">매트에서<br>돌아오면 진행</div>';
-      else if(d.status==='closed') eta = '<div class="eta">-</div>';
-      else { var m = (current.length ? Math.round(d.avg/2) : 0) + activeIdx*d.avg; eta = '<div class="eta">예상 대기<b class="num">' + (m<=0 ? '곧 시작' : '약 ' + m + '분') + '</b></div>'; }
-      if(isHit && !hitText) hitText = '<b>' + esc(p.name) + '</b> 님은 <b>' + (i+1) + '번째</b>예요' + (away ? ' (시합 중이라 순서를 지켜두고 있어요)' : (d.status!=='closed' ? ' · 예상 대기 약 ' + Math.max((current.length?Math.round(d.avg/2):0)+activeIdx*d.avg,0) + '분' : ''));
+      var eta = away ? '<div class="eta">시합 중</div>' : '';
+      if(isHit && !hitText) hitText = '<b>' + esc(p.name) + '</b> 님은 <b>' + (i+1) + '번째</b>예요' + (away ? ' (시합 중이라 순서를 지켜두고 있어요)' : '');
       h += '<li class="row' + (away?' away':'') + (!away && activeIdx===0 ? ' first':'') + (isHit?' hit':'') + '">';
       h += '<div class="pos num">' + (i+1) + '</div><div class="name"><b>' + esc(p.name) + '</b><div class="tags">'
          + (p.kind==='사전신청' ? '<span class="tag pre">사전 신청</span>' : '<span class="tag">현장 접수</span>')
@@ -234,7 +231,7 @@ function render(){
     h += '</div></section>';
   }
 
-  h += '<div class="guide"><div>· 초상화는 한 번에 한 분씩 그려요. 1인 약 ' + d.avg + '분 걸려요.</div><div>· 시합 호명을 받으면 다녀오세요. 순서는 그대로 유지돼요.</div><div>· 예상 시간은 대략이에요. 차례가 가까우면 부스 근처에 계셔 주세요.</div></div>';
+  h += '<div class="guide"><div>· 초상화는 한 번에 한 분씩 그려요.</div><div>· 시합 호명을 받으면 다녀오세요. 순서는 그대로 유지돼요.</div><div>· 차례가 가까우면 부스 근처에 계셔 주세요.</div></div>';
   h += '<div class="foot"><a href="' + INSTA + '" target="_blank" rel="noopener">@bjj_artist</a><span>BJJ ARTIST</span></div>';
 
   bottom.innerHTML = h;
