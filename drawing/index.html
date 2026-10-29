@@ -103,12 +103,25 @@ button,input{font:inherit;color:inherit}
 .foot{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12.5px}
 .foot a{color:inherit}
 .skeleton{color:var(--muted);text-align:center;padding:40px 0}
+
+/* 내 순서 결과 카드 */
+.find{background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--r);padding:14px}
+.find label{color:var(--accent)}
+.findres:empty{display:none}
+.mine{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 0 4px;text-align:center}
+.mine-name{font-size:16px;font-weight:500;color:var(--muted)}
+.mine-pos{font-size:22px;font-weight:700}
+.mine-pos .num{font-family:var(--display);font-size:72px;line-height:1;color:var(--accent);margin-right:4px;letter-spacing:.02em}
+.mine-pos.small{font-size:24px;color:var(--accent)}
+.mine-sub{font-size:15px;font-weight:500}
+.miss{padding-top:10px;color:var(--warn);font-size:14px;font-weight:500}
+.row.first .eta{color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
 <div id="app">
   <div id="top"><div class="skeleton">대기 순서를 불러오는 중이에요…</div></div>
-  <div class="find" id="findbox" hidden><label for="q">내 순서 찾기</label><input id="q" type="search" placeholder="신청한 이름을 입력하세요" autocomplete="off" enterkeyhint="search"><div class="findres" id="findres" aria-live="polite"></div></div>
+  <div class="find" id="findbox" hidden><label for="q">내 순서 찾기 · 신청한 이름을 입력하세요</label><input id="q" type="search" placeholder="예: 김민수" autocomplete="off" enterkeyhint="search"><div class="findres" id="findres" aria-live="polite"></div></div>
   <div id="bottom"></div>
 </div>
 
@@ -176,9 +189,15 @@ function render(){
   }
   var d = data, h = '';
   var current = d.rows.filter(function(p){ return p.st === '그리는중'; });
-  var queue = d.rows.filter(function(p){ return p.st === '대기' || p.st === '시합중'; });
   var done = d.rows.filter(function(p){ return p.st === '완료'; });
-  var activeIdx = 0, q = norm(query), hitText = '';
+  var queue = d.rows.filter(function(p){ return p.st !== '그리는중' && p.st !== '완료'; });
+  var q = norm(query), hitIdx = -1;
+
+  /* 내 순서 찾기: 이름이 정확히 같은 사람 먼저, 없으면 이름 일부가 맞는 사람 */
+  if(q){
+    queue.forEach(function(p,i){ if(hitIdx < 0 && norm(p.name) === q) hitIdx = i; });
+    if(hitIdx < 0) queue.forEach(function(p,i){ if(hitIdx < 0 && norm(p.name).indexOf(q) > -1) hitIdx = i; });
+  }
 
   h += '<header class="top"><div class="eyebrow">BJJ ARTIST · LIVE DRAWING</div><h1>' + esc(d.title) + '</h1>';
   h += '<div class="meta"><span class="pill ' + d.status + '"><span class="dot"></span>' + STATUS[d.status] + '</span>';
@@ -194,36 +213,39 @@ function render(){
     var msg = d.status==='closed' ? '오늘 드로잉 이벤트가 끝났어요' : d.status==='break' ? '작가가 잠시 쉬는 중이에요' : '곧 다음 분을 그릴 예정이에요';
     h += '<section class="now empty"><div class="label"><span class="dot"></span>NOW DRAWING</div><div class="who">' + msg + '</div></section>';
   }
-
-  var firstActive = queue.filter(function(p){ return p.st==='대기'; })[0];
-  if(firstActive && d.status !== 'closed') h += '<div class="next"><span>다음 순서</span><b>' + esc(firstActive.name) + ' 님</b><span>부스 근처에서 기다려 주세요</span></div>';
-
   top.innerHTML = h; h = '';
+
+  /* 내 순서 결과 */
+  var res = '';
+  if(q){
+    if(hitIdx > -1){
+      var me = queue[hitIdx], n = hitIdx + 1;
+      res = '<div class="mine"><div class="mine-name">' + esc(me.name) + ' 님은</div>'
+          + '<div class="mine-pos"><span class="num">' + n + '</span>번째</div>'
+          + '<div class="mine-sub">' + (n === 1 ? '다음 순서예요! 부스 앞에서 기다려 주세요' : '앞에 ' + (n-1) + '명이 기다리고 있어요') + '</div></div>';
+    } else if(current.some(function(p){ return norm(p.name).indexOf(q) > -1; })){
+      res = '<div class="mine"><div class="mine-pos small">지금 그리고 있어요!</div></div>';
+    } else if(done.some(function(p){ return norm(p.name).indexOf(q) > -1; })){
+      res = '<div class="mine"><div class="mine-pos small">완료됐어요</div><div class="mine-sub">참여해 주셔서 고마워요!</div></div>';
+    } else {
+      res = '<div class="miss">명단에서 찾지 못했어요. 신청한 이름 그대로 입력하거나 부스에 문의해 주세요.</div>';
+    }
+  }
+
   h += '<section class="sec"><div class="sechead"><h2>대기 명단</h2><span class="count num">' + queue.length + '명</span></div>';
   if(!queue.length){
     h += '<div class="emptybox">지금은 대기자가 없어요. 부스에서 바로 신청할 수 있어요.</div>';
   } else {
     h += '<ol class="list">';
     queue.forEach(function(p,i){
-      var away = p.st === '시합중';
-      var isHit = q && norm(p.name).indexOf(q) > -1;
-      var eta = away ? '<div class="eta">시합 중</div>' : '';
-      if(isHit && !hitText) hitText = '<b>' + esc(p.name) + '</b> 님은 <b>' + (i+1) + '번째</b>예요' + (away ? ' (시합 중이라 순서를 지켜두고 있어요)' : '');
-      h += '<li class="row' + (away?' away':'') + (!away && activeIdx===0 ? ' first':'') + (isHit?' hit':'') + '">';
+      h += '<li class="row' + (i===0 ? ' first':'') + (i===hitIdx ? ' hit':'') + '">';
       h += '<div class="pos num">' + (i+1) + '</div><div class="name"><b>' + esc(p.name) + '</b><div class="tags">'
          + (p.kind==='사전신청' ? '<span class="tag pre">사전 신청</span>' : '<span class="tag">현장 접수</span>')
-         + (away ? '<span class="tag away">시합 중 · 순서 유지</span>' : '') + '</div></div>' + eta + '</li>';
-      if(!away) activeIdx++;
+         + '</div></div>' + (i===0 ? '<div class="eta">다음 순서</div>' : '') + '</li>';
     });
     h += '</ol>';
   }
   h += '</section>';
-
-  if(q && !hitText){
-    var c = current.some(function(p){return norm(p.name).indexOf(q)>-1;});
-    var dn = done.some(function(p){return norm(p.name).indexOf(q)>-1;});
-    hitText = c ? '지금 그리고 있어요!' : dn ? '이미 완료됐어요. 참여해 주셔서 고마워요!' : '명단에서 찾지 못했어요. 부스에 문의해 주세요.';
-  }
 
   if(done.length){
     h += '<section class="sec"><div class="sechead"><h2>완료</h2><span class="count num">' + done.length + '명</span></div><div class="done">';
@@ -231,11 +253,12 @@ function render(){
     h += '</div></section>';
   }
 
-  h += '<div class="guide"><div>· 초상화는 한 번에 한 분씩 그려요.</div><div>· 시합 호명을 받으면 다녀오세요. 순서는 그대로 유지돼요.</div><div>· 차례가 가까우면 부스 근처에 계셔 주세요.</div></div>';
+  h += '<div class="guide"><div>· 초상화는 한 번에 한 분씩 그려요.</div><div>· 차례가 가까우면 부스 근처에 계셔 주세요.</div></div>';
   h += '<div class="foot"><a href="' + INSTA + '" target="_blank" rel="noopener">@bjj_artist</a><span>BJJ ARTIST</span></div>';
 
   bottom.innerHTML = h;
   document.getElementById('findbox').hidden = false;
+  var hitText = res;
   document.getElementById('findres').innerHTML = hitText;
 }
 
