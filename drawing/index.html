@@ -162,6 +162,19 @@ input[type=text]{border:1px solid var(--line);background:var(--surface);border-r
 .count-now .v{font-family:var(--display);font-size:56px;line-height:.9;color:var(--gold)}
 .count-now .v small{font-family:var(--body);font-size:16px;color:var(--stage-ink);margin-left:4px}
 .hint{font-size:12.5px;color:var(--muted)}
+.winner{display:flex;gap:12px;align-items:flex-start;margin-top:10px;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer;-webkit-user-select:none;user-select:none}
+.winner input{position:absolute;opacity:0;width:1px;height:1px}
+.winner .box{flex:none;width:24px;height:24px;border-radius:7px;border:2px solid var(--muted);display:grid;place-items:center;transition:background .15s,border-color .15s;margin-top:1px}
+.winner input:checked + .box{background:var(--accent);border-color:var(--accent)}
+.winner input:checked + .box::after{content:"";width:6px;height:11px;border:solid var(--accent-ink);border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.winner input:focus-visible + .box{outline:2px solid var(--accent);outline-offset:2px}
+.winner:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.winner .wt{display:flex;flex-direction:column;gap:2px}
+.winner .wt b{font-size:16px}
+.winner .wt small{font-size:12.5px;color:var(--muted);line-height:1.5}
+.undo{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:0 14px;background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink);font-size:15px}
+.undo .ic{font-size:20px;line-height:1}
+.undo .lb{font-weight:500;color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;text-align:left}
 .notice-box{background:var(--warn-soft);border-radius:14px;padding:12px 14px;font-size:13.5px;line-height:1.6;display:flex;flex-direction:column;gap:2px}
 .notice-box b:first-child{color:var(--warn);font-size:14px;margin-bottom:2px}
 .success{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:10px 0}
@@ -318,8 +331,10 @@ function refresh(){
 }
 
 /* 내 순번 계산 */
-function findMe(name){
+function findMe(name,kind){
   if(!data||!name) return null; var q=norm(name), i;
+  /* 동명이인: 내가 신청한 구분(사전 당첨/현장)과 같은 사람을 먼저 찾아요 */
+  if(kind) for(i=0;i<data.queue.length;i++) if(norm(data.queue[i].name)===q&&((data.queue[i].kind==='사전신청')===(kind==='사전신청'))) return {pos:i+1,name:data.queue[i].name};
   for(i=0;i<data.queue.length;i++) if(norm(data.queue[i].name)===q) return {pos:i+1,name:data.queue[i].name};
   if(data.current.some(function(p){return norm(p.name)===q;})) return {drawing:true,name:name};
   if(data.held.some(function(p){return norm(p.name)===q;})) return {hold:true,name:name};
@@ -350,7 +365,7 @@ function mineCard(m, forgettable){
 function renderGuest(){
   if(IS_ADMIN) return;
   if(!data){ app.innerHTML=failed?'<div class="error">순서를 불러오지 못했어요. 잠시 뒤 자동으로 다시 시도해요.</div>':'<div class="skeleton">불러오는 중이에요…</div>'; return; }
-  var d=data, h='', myName=load('myName'), mine=findMe(myName);
+  var d=data, h='', myName=load('myName'), mine=findMe(myName,load('myKind'));
   var lookEl=document.getElementById('look'), lookVal=lookEl?lookEl.value:'';
   var lookRes=(document.getElementById('lookres')||{}).innerHTML||'';
   var focusLook=document.activeElement&&document.activeElement.id==='look';
@@ -408,9 +423,10 @@ function doLookup(){
 var sheetEl=document.getElementById('sheet'), sheetBody=document.getElementById('sheet-body'), busy=false;
 function openSheet(){
   sheetBody.innerHTML='<div class="count-now"><div class="k">현재 대기 인원</div><div class="v num" id="sc">'+(data?data.queue.length:0)+'<small>명</small></div></div>'
-    +'<form id="joinform" novalidate><div class="row-in"><input type="text" id="jname" maxlength="20" placeholder="이름 또는 닉네임" autocomplete="off" enterkeyhint="done"><button class="btn go" type="submit" id="jbtn">입력</button></div></form>'
+    +'<form id="joinform" novalidate><div class="row-in"><input type="text" id="jname" maxlength="20" placeholder="이름 또는 닉네임" autocomplete="off" enterkeyhint="done"><button class="btn go" type="submit" id="jbtn">입력</button></div>'
+    +'<label class="winner" for="jwin"><input type="checkbox" id="jwin"><span class="box" aria-hidden="true"></span><span class="wt"><b>사전 당첨자입니다</b><small>인스타 이벤트로 미리 당첨된 분만 체크해 주세요. 당첨 때 쓴 이름 그대로 입력하면 우선 순번으로 연결돼요.</small></span></label></form>'
     +'<div class="hint">입력한 이름은 대기 명단에 공개돼요. 닉네임도 괜찮아요.</div><div id="jmsg"></div>'
-    +'<div class="notice-box"><b>신청 전에 꼭 읽어 주세요</b><div>· 호명했을 때 부스에 안 계시면 다음 분이 먼저 진행해요.</div><div>· 그 경우 다시 신청해 주셔야 하고, 순번은 <b>맨 뒤로</b> 가요.</div><div>· 미리 당첨된 사전 당첨자 분들이 우선 진행돼서 순번이 뒤로 밀릴 수 있어요.</div><div>양해 부탁드려요. 차례가 가까우면 부스 근처에 계셔 주세요!</div></div>';
+    +'<div class="notice-box"><b>신청 전에 꼭 읽어 주세요</b><div>· 호명했을 때 부스에 안 계시면 다음 분이 먼저 진행해요.</div><div>· 그 경우 다시 신청해 주셔야 하고, 순번은 <b>맨 뒤로</b> 가요.</div><div>· 미리 당첨된 사전 당첨자 분들이 우선 진행돼서 순번이 뒤로 밀릴 수 있어요.</div><div>· 사전 당첨자는 아래 <b>사전 당첨자입니다</b>에 꼭 체크해 주세요.</div><div>양해 부탁드려요. 차례가 가까우면 부스 근처에 계셔 주세요!</div></div>';
   sheetEl.hidden=false; requestAnimationFrame(function(){requestAnimationFrame(function(){sheetEl.classList.add('open');});});
   setTimeout(function(){var i=document.getElementById('jname'); if(i) i.focus();},380);
 }
@@ -423,14 +439,15 @@ function submitJoin(e){
   var name=(inp.value||'').replace(/\s+/g,' ').trim();
   if(!name){ inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); msg.innerHTML='<div class="miss">이름을 입력해 주세요</div>'; inp.focus(); return; }
   busy=true; btn.disabled=true; btn.innerHTML='<span class="spin"></span>'; msg.innerHTML='';
-  api({action:'join',name:name}).then(function(r){
-    store('myName',r.name);
+  var win=document.getElementById('jwin').checked;
+  api({action:'join',name:name,winner:win?'1':''}).then(function(r){
+    store('myName',r.name); store('myKind',r.kind||'현장');
     sheetBody.innerHTML='<div class="success"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="37"/><polyline points="26,44 37,55 59,31"/></svg>'
-      +'<div class="t1">'+esc(r.name)+' 님, '+(r.already?'이미 같은 이름으로 신청돼 있어요':'신청 완료!')+'</div>'
+      +'<div class="t1">'+esc(r.name)+' 님, '+(r.winner?'사전 당첨자 확인됐어요!':r.already?'이미 같은 이름으로 신청돼 있어요':'신청 완료!')+'</div>'
       +(r.drawing?'<div class="t2">지금 그리고 있어요</div>':r.hold?'<div class="t2">잠시 자리 비움 상태예요</div><div class="hint">부스에 말씀해 주시면 바로 우선 진행해요</div>':'<div class="t2"><span class="n num">'+r.pos+'</span>번째 순서예요</div>')
-      +'<div class="hint">'+(r.already?'다른 분이라면 이름 뒤에 숫자나 닉네임을 붙여서 다시 신청해 주세요':'이 화면을 다시 열면 내 순번이 맨 위에 보여요')+'</div></div>'
+      +'<div class="hint">'+(r.winner?'사전 당첨자는 우선 진행돼요. 이 화면을 다시 열면 내 순번이 맨 위에 보여요':r.already?'다른 분이라면 이름 뒤에 숫자나 닉네임을 붙여서 다시 신청해 주세요':'이 화면을 다시 열면 내 순번이 맨 위에 보여요')+'</div></div>'
       +'<button class="btn cta" type="button" data-close>내 순번 보러 가기</button>';
-    if(!r.already) confetti();
+    if(!r.already||r.winner) confetti();
     refresh();
   }).catch(function(err){
     btn.disabled=false; btn.textContent='입력';
@@ -457,7 +474,7 @@ function bindGuest(){
     var b=e.target.closest('[data-act]'); if(!b) return; var a=b.getAttribute('data-act');
     if(a==='open') openSheet();
     if(a==='look') doLookup();
-    if(a==='forget'){ store('myName',null); renderGuest(); }
+    if(a==='forget'){ store('myName',null); store('myKind',null); renderGuest(); }
   });
   app.addEventListener('keydown',function(e){ if(e.target.id==='look'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();doLookup();} });
   sheetEl.addEventListener('click',function(e){ if(e.target.closest('[data-close]')) closeSheet(); });
@@ -492,6 +509,8 @@ function renderAdmin(){
   }
   var s=A.state, d=shape(s.rows,s.status,s.notice), h='';
   h+='<div class="admin-bar"><b>ADMIN</b><a href="./" target="_blank" rel="noopener">손님 화면 보기 ↗</a></div>';
+  var un=s.undo||{count:0,label:''};
+  h+='<button class="btn undo" type="button" data-op="undo"'+(un.count?'':' disabled')+'><span class="ic">↶</span><span>되돌리기</span><span class="lb">'+(un.count?'방금: '+esc(un.label):'되돌릴 동작이 없어요')+'</span></button>';
 
   h+='<div class="box"><h3>진행 상태</h3><div class="seg">';
   ['진행중','쉬는중','마감'].forEach(function(k){h+='<button type="button" data-op="status" data-v="'+k+'" aria-pressed="'+(s.status===k)+'">'+k.replace('중',' 중')+'</button>';});
@@ -563,8 +582,8 @@ var aBusy=false;
 function adminDo(params,okMsg){
   if(aBusy) return; aBusy=true;
   app.querySelectorAll('[data-op]').forEach(function(b){b.disabled=true;});
-  adminCall(params).then(function(r){A.state=r;renderAdmin();if(okMsg) toast(okMsg);})
-    .catch(function(err){ if(err.data&&err.data.rows){A.state={rows:err.data.rows,status:err.data.status,notice:err.data.notice};} toast(err.message==='timeout'||err.message==='load'?'연결이 불안정해요. 다시 눌러 주세요':err.message);renderAdmin();})
+  adminCall(params).then(function(r){A.state=r;renderAdmin();if(r.undone) toast('취소했어요: '+r.undone); else if(okMsg) toast(okMsg);})
+    .catch(function(err){ if(err.data&&err.data.rows){A.state={rows:err.data.rows,status:err.data.status,notice:err.data.notice,undo:err.data.undo};} toast(err.message==='timeout'||err.message==='load'?'연결이 불안정해요. 다시 눌러 주세요':err.message);renderAdmin();})
     .then(function(){aBusy=false;});
 }
 
@@ -584,6 +603,7 @@ function bindAdmin(){
     var b=e.target.closest('[data-op]'); if(!b||b.disabled) return;
     var op=b.getAttribute('data-op'), row=b.getAttribute('data-row'), nm=b.getAttribute('data-name');
     if(op==='logout'){store('adminPin',null);A.pin='';A.state=null;renderAdmin();return;}
+    if(op==='undo'){ adminDo({op:'undo'}); return; }
     if(op==='delete'){
       if(!A.armed[row]){A.armed[row]=1;b.classList.add('armed');b.textContent='한 번 더';setTimeout(function(){delete A.armed[row];if(b.isConnected){b.classList.remove('armed');b.textContent='삭제';}},3000);return;}
       delete A.armed[row]; adminDo({op:'delete',row:row,name:nm},nm+' 님을 삭제했어요'); return;
@@ -597,6 +617,10 @@ function bindAdmin(){
     if(op==='noshow') adminDo({op:'noshow',row:row,name:nm},nm+' 님 없음 처리 — 다시 신청하면 맨 뒤');
     if(op==='return') adminDo({op:'return',row:row,name:nm},nm+' 님 대기로 돌아왔어요');
     if(op==='move'){ var dir=b.getAttribute('data-dir'); adminDo({op:'move',row:row,name:nm,dir:dir},nm+' 님 '+({up:'한 칸 위로',down:'한 칸 뒤로',top:'맨 앞으로'})[dir]); }
+  });
+  document.addEventListener('keydown',function(e){
+    var t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')) return;
+    if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='z'||e.key==='Z')&&A.state&&A.state.undo&&A.state.undo.count){ e.preventDefault(); adminDo({op:'undo'}); }
   });
   renderAdmin();
   if(A.pin) adminLoad().catch(function(){A.pin='';store('adminPin',null);renderAdmin();});
