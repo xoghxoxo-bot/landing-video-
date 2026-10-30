@@ -426,7 +426,7 @@ function openSheet(){
     +'<form id="joinform" novalidate><div class="row-in"><input type="text" id="jname" maxlength="20" placeholder="이름 또는 닉네임" autocomplete="off" enterkeyhint="done"><button class="btn go" type="submit" id="jbtn">입력</button></div>'
     +'<label class="winner" for="jwin"><input type="checkbox" id="jwin"><span class="box" aria-hidden="true"></span><span class="wt"><b>사전 당첨자입니다</b><small>인스타 이벤트로 미리 당첨된 분만 체크해 주세요. 당첨 때 쓴 이름 그대로 입력하면 우선 순번으로 연결돼요.</small></span></label></form>'
     +'<div class="hint">입력한 이름은 대기 명단에 공개돼요. 닉네임도 괜찮아요.</div><div id="jmsg"></div>'
-    +'<div class="notice-box"><b>신청 전에 꼭 읽어 주세요</b><div>· 호명했을 때 부스에 안 계시면 다음 분이 먼저 진행해요.</div><div>· 그 경우 다시 신청해 주셔야 하고, 순번은 <b>맨 뒤로</b> 가요.</div><div>· 미리 당첨된 사전 당첨자 분들이 우선 진행돼서 순번이 뒤로 밀릴 수 있어요.</div><div>· 사전 당첨자는 아래 <b>사전 당첨자입니다</b>에 꼭 체크해 주세요.</div><div>양해 부탁드려요. 차례가 가까우면 부스 근처에 계셔 주세요!</div></div>';
+    +'<div class="notice-box"><b>신청 전에 꼭 읽어 주세요</b><div>· 호명했을 때 부스에 안 계시면 다음 분이 먼저 진행해요.</div><div>· 그 경우 다시 신청해 주셔야 하고, 순번은 <b>맨 뒤로</b> 가요.</div><div>· 미리 당첨된 사전 당첨자 분들이 우선 진행돼서 순번이 뒤로 밀릴 수 있어요.</div><div>· 사전 당첨자는 이름 칸 밑의 <b>사전 당첨자입니다</b>에 꼭 체크해 주세요.</div><div>양해 부탁드려요. 차례가 가까우면 부스 근처에 계셔 주세요!</div></div>';
   sheetEl.hidden=false; requestAnimationFrame(function(){requestAnimationFrame(function(){sheetEl.classList.add('open');});});
   setTimeout(function(){var i=document.getElementById('jname'); if(i) i.focus();},380);
 }
