@@ -131,6 +131,9 @@ input[type=text]{border:1px solid var(--line);background:var(--surface);border-r
 .tag.pre{color:var(--accent);background:var(--accent-soft)}
 .tag.next{color:var(--accent);font-weight:700;background:none;padding:0;font-size:13px}
 .item .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.admin-list .item{grid-template-columns:44px 1fr}
+.admin-list .item .acts{grid-column:1 / -1;justify-content:flex-start;padding-left:8px}
+.sm.mv{background:var(--paper);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);font-weight:500}
 .emptybox{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:22px 16px;text-align:center;color:var(--muted)}
 .done{display:flex;flex-wrap:wrap;gap:6px}
 .done span{font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--surface)}
@@ -283,7 +286,7 @@ function jsonp(url){
 function api(params){
   if(!SCRIPT_URL) return Promise.reject(new Error('신청 기능이 아직 연결되지 않았어요'));
   var q=Object.keys(params).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(params[k]);}).join('&');
-  return jsonp(SCRIPT_URL+'?'+q).then(function(r){ if(!r||!r.ok) throw new Error((r&&r.error)||'처리하지 못했어요'); return r; });
+  return jsonp(SCRIPT_URL+'?'+q).then(function(r){ if(!r||!r.ok){ var er=new Error((r&&r.error)||'처리하지 못했어요'); er.data=r; throw er; } return r; });
 }
 
 /* ---------- 시트 읽기 (손님 화면) ---------- */
@@ -408,9 +411,9 @@ function submitJoin(e){
   api({action:'join',name:name}).then(function(r){
     store('myName',r.name);
     sheetBody.innerHTML='<div class="success"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="37"/><polyline points="26,44 37,55 59,31"/></svg>'
-      +'<div class="t1">'+esc(r.name)+' 님, '+(r.already?'이미 신청돼 있어요':'신청 완료!')+'</div>'
+      +'<div class="t1">'+esc(r.name)+' 님, '+(r.already?'이미 같은 이름으로 신청돼 있어요':'신청 완료!')+'</div>'
       +(r.drawing?'<div class="t2">지금 그리고 있어요</div>':'<div class="t2"><span class="n num">'+r.pos+'</span>번째 순서예요</div>')
-      +'<div class="hint">이 화면을 다시 열면 내 순번이 맨 위에 보여요</div></div>'
+      +'<div class="hint">'+(r.already?'다른 분이라면 이름 뒤에 숫자나 닉네임을 붙여서 다시 신청해 주세요':'이 화면을 다시 열면 내 순번이 맨 위에 보여요')+'</div></div>'
       +'<button class="btn cta" type="button" data-close>내 순번 보러 가기</button>';
     if(!r.already) confetti();
     refresh();
@@ -481,19 +484,25 @@ function renderAdmin(){
 
   h+='<div class="box nowbox"><h3>지금 그리는 중</h3>';
   h+=d.current.length?'<div class="nowname">'+d.current.map(function(p){return esc(p.name);}).join(', ')+'</div>':'<div class="nowname idle">아직 아무도 없어요</div>';
+  d.current.forEach(function(p){ h+='<button class="btn sm back" type="button" data-op="back" data-row="'+p.row+'" data-name="'+esc(p.name)+'" style="align-self:flex-start">그리기 중단 · 대기로 돌려놓기</button>'; });
   var nextP=d.queue[0];
   h+='<div class="two"><button class="btn b-done" type="button" data-op="done"'+(d.current.length?'':' disabled')+'>완료</button>'
-    +'<button class="btn b-next" type="button" data-op="next"'+(nextP?'':' disabled')+'>'+(nextP?(d.current.length?'완료 → ':'')+esc(nextP.name)+' 시작':'대기자 없음')+'</button></div></div>';
+    +'<button class="btn b-next" type="button" data-op="next"'+(nextP?'':' disabled')+'>'+(nextP?(d.current.length?'완료 → ':'')+esc(nextP.name)+' 시작':'대기자 없음')+'</button></div>'
+    +(nextP?'<div class="hint">'+esc(nextP.name)+' 님이 자리에 없으면 명단에서 [↓ 한 칸 뒤로]를 누르거나, 올 수 있는 사람 옆 [시작]을 누르세요.</div>':'')+'</div>';
 
   h+='<section class="sec"><div class="sechead"><h2>대기 명단</h2><span class="count num">'+d.queue.length+'명</span></div>';
   if(!d.queue.length) h+='<div class="emptybox">대기자가 없어요</div>';
   else{
-    h+='<ol class="list">';
+    h+='<ol class="list admin-list">';
     d.queue.forEach(function(p,i){
       h+='<li class="item'+(i===0?' first':'')+'"><div class="p num">'+(i+1)+'</div><div class="nm"><b>'+esc(p.name)+'</b><div class="tags">'
         +(p.kind==='사전신청'?'<span class="tag pre">사전 신청</span>':'<span class="tag">현장 접수</span>')+'</div></div>'
-        +'<div class="acts"><button class="btn sm start" type="button" data-op="start" data-row="'+p.row+'">시작</button>'
-        +'<button class="btn sm del" type="button" data-op="delete" data-row="'+p.row+'">삭제</button></div></li>';
+        +'<div class="acts">'
+        +'<button class="btn sm start" type="button" data-op="start" data-row="'+p.row+'" data-name="'+esc(p.name)+'">시작</button>'
+        +'<button class="btn sm mv" type="button" data-op="move" data-dir="up" data-row="'+p.row+'" data-name="'+esc(p.name)+'"'+(i===0?' disabled':'')+' aria-label="한 칸 위로">↑</button>'
+        +'<button class="btn sm mv" type="button" data-op="move" data-dir="down" data-row="'+p.row+'" data-name="'+esc(p.name)+'"'+(i===d.queue.length-1?' disabled':'')+'>↓ 한 칸 뒤로</button>'
+        +'<button class="btn sm mv" type="button" data-op="move" data-dir="top" data-row="'+p.row+'" data-name="'+esc(p.name)+'"'+(i===0?' disabled':'')+'>맨 앞으로</button>'
+        +'<button class="btn sm del" type="button" data-op="delete" data-row="'+p.row+'" data-name="'+esc(p.name)+'">삭제</button></div></li>';
     });
     h+='</ol>';
   }
@@ -508,7 +517,7 @@ function renderAdmin(){
   if(d.done.length){
     h+='<section class="sec"><div class="sechead"><h2>완료</h2><span class="count num">'+d.done.length+'명</span></div><ol class="list">';
     d.done.slice().reverse().forEach(function(p){
-      h+='<li class="item"><div class="p num" style="font-size:18px;color:var(--muted)">✓</div><div class="nm"><b>'+esc(p.name)+'</b></div><div class="acts"><button class="btn sm back" type="button" data-op="back" data-row="'+p.row+'">대기로 되돌리기</button></div></li>';
+      h+='<li class="item"><div class="p num" style="font-size:18px;color:var(--muted)">✓</div><div class="nm"><b>'+esc(p.name)+'</b></div><div class="acts"><button class="btn sm back" type="button" data-op="back" data-row="'+p.row+'" data-name="'+esc(p.name)+'">대기로 되돌리기</button></div></li>';
     });
     h+='</ol></section>';
   }
@@ -525,7 +534,7 @@ function adminDo(params,okMsg){
   if(aBusy) return; aBusy=true;
   app.querySelectorAll('[data-op]').forEach(function(b){b.disabled=true;});
   adminCall(params).then(function(r){A.state=r;renderAdmin();if(okMsg) toast(okMsg);})
-    .catch(function(err){toast(err.message==='timeout'||err.message==='load'?'연결이 불안정해요. 다시 눌러 주세요':err.message);renderAdmin();})
+    .catch(function(err){ if(err.data&&err.data.rows){A.state={rows:err.data.rows,status:err.data.status,notice:err.data.notice};} toast(err.message==='timeout'||err.message==='load'?'연결이 불안정해요. 다시 눌러 주세요':err.message);renderAdmin();})
     .then(function(){aBusy=false;});
 }
 
@@ -543,17 +552,18 @@ function bindAdmin(){
   app.addEventListener('click',function(e){
     var k=e.target.closest('[data-kind]'); if(k){A.kind=k.getAttribute('data-kind'); app.querySelectorAll('[data-kind]').forEach(function(x){x.setAttribute('aria-pressed',x===k);}); return;}
     var b=e.target.closest('[data-op]'); if(!b||b.disabled) return;
-    var op=b.getAttribute('data-op'), row=b.getAttribute('data-row');
+    var op=b.getAttribute('data-op'), row=b.getAttribute('data-row'), nm=b.getAttribute('data-name');
     if(op==='logout'){store('adminPin',null);A.pin='';A.state=null;renderAdmin();return;}
     if(op==='delete'){
       if(!A.armed[row]){A.armed[row]=1;b.classList.add('armed');b.textContent='한 번 더';setTimeout(function(){delete A.armed[row];if(b.isConnected){b.classList.remove('armed');b.textContent='삭제';}},3000);return;}
-      delete A.armed[row]; adminDo({op:'delete',row:row},'삭제했어요'); return;
+      delete A.armed[row]; adminDo({op:'delete',row:row,name:nm},nm+' 님을 삭제했어요'); return;
     }
     if(op==='status') adminDo({op:'status',value:b.getAttribute('data-v')},b.textContent+'(으)로 바꿨어요');
     if(op==='done') adminDo({op:'done'},'완료 처리했어요');
     if(op==='next') adminDo({op:'next'},'다음 분을 시작했어요');
-    if(op==='start') adminDo({op:'start',row:row},'그리기 시작했어요');
-    if(op==='back') adminDo({op:'back',row:row},'대기로 되돌렸어요');
+    if(op==='start') adminDo({op:'start',row:row,name:nm},nm+' 님 그리기 시작');
+    if(op==='back') adminDo({op:'back',row:row,name:nm},nm+' 님을 대기로 돌려놨어요');
+    if(op==='move'){ var dir=b.getAttribute('data-dir'); adminDo({op:'move',row:row,name:nm,dir:dir},nm+' 님 '+({up:'한 칸 위로',down:'한 칸 뒤로',top:'맨 앞으로'})[dir]); }
   });
   renderAdmin();
   if(A.pin) adminLoad().catch(function(){A.pin='';store('adminPin',null);renderAdmin();});
