@@ -146,7 +146,23 @@ input[type=text]{border:1px solid var(--line);background:var(--surface2);border-
 .tag.pre{color:var(--accent);background:var(--accent-soft)}
 .tag.next{color:var(--accent);font-weight:700;background:none;padding:0;font-size:13px}
 .item .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.admin-list .item{grid-template-columns:44px 1fr}
+.admin-list .item{grid-template-columns:56px 1fr;cursor:pointer}
+.admin-list .nm{cursor:pointer}
+.pick-btn{display:flex;align-items:center;gap:6px;background:none;border:0;padding:4px 0 4px 4px;color:inherit}
+.pick-btn .ck{width:22px;height:22px;border-radius:50%;border:2px solid var(--muted);flex:none;display:grid;place-items:center;transition:background .15s,border-color .15s}
+.pick-btn .p{font-family:var(--display);font-size:26px;line-height:1}
+.item.sel{background:var(--hit)!important;box-shadow:inset 3px 0 0 var(--accent)}
+.item.sel .ck{background:var(--accent);border-color:var(--accent)}
+.item.sel .ck::after{content:"";width:5px;height:10px;border:solid var(--accent-ink);border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.b-next.picked{box-shadow:0 0 0 3px rgba(217,171,94,.35)}
+.hint.pick{color:var(--accent)}
+.selbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;gap:8px;align-items:center;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  background:rgba(14,15,16,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);animation:rise .25s both}
+.selbar .b-next{flex:1;min-height:56px;font-size:16px;border-radius:14px}
+.selbar .sm{min-height:56px;padding:0 16px}
+.wrap:has(.selbar){padding-bottom:110px}
+.hint.pick .linkbtn{color:var(--muted);margin-left:6px}
 .admin-list .item .acts{grid-column:1 / -1;justify-content:flex-start;padding-left:6px;gap:5px}
 .admin-list .sm{padding:0 10px;font-size:13.5px}
 .sm.mv{background:var(--paper);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);font-weight:500}
@@ -546,7 +562,7 @@ function playIntro(){
 /* ==========================================================
    관리자 화면 (주소 뒤에 ?admin 을 붙여서 들어가요)
    ========================================================== */
-var A={pin:load('adminPin')||'', state:null, kind:'현장', armed:{}};
+var A={pin:load('adminPin')||'', state:null, kind:'현장', armed:{}, sel:null};   // sel = 체크해 둔 사람 {row,name}
 function adminCall(params){ params.action='admin'; params.pin=A.pin; return api(params); }
 function adminLoad(){ return adminCall({op:'state'}).then(function(r){A.state=r;renderAdmin();}); }
 
@@ -568,17 +584,22 @@ function renderAdmin(){
   h+='<div class="box nowbox"><h3>지금 그리는 중</h3>';
   h+=d.current.length?'<div class="nowname">'+d.current.map(function(p){return esc(p.name);}).join(', ')+'</div>':'<div class="nowname idle">아직 아무도 없어요</div>';
   d.current.forEach(function(p){ h+='<button class="btn sm back" type="button" data-op="back" data-row="'+p.row+'" data-name="'+esc(p.name)+'" style="align-self:flex-start">그리기 중단 · 대기로 돌려놓기</button>'; });
-  var nextP=d.queue[0];
+  /* 대기 명단에서 체크한 사람이 있으면 큰 버튼이 그 사람을 시작해요. 없으면 대기 1번 */
+  if(A.sel && !d.queue.some(function(p){return p.row===A.sel.row&&p.name===A.sel.name;})) A.sel=null;
+  var nextP=A.sel?d.queue.filter(function(p){return p.row===A.sel.row;})[0]:d.queue[0];
   h+='<div class="two"><button class="btn b-done" type="button" data-op="done"'+(d.current.length?'':' disabled')+'>완료</button>'
-    +'<button class="btn b-next" type="button" data-op="next"'+(nextP?'':' disabled')+'>'+(nextP?(d.current.length?'완료 → ':'')+esc(nextP.name)+' 시작':'대기자 없음')+'</button></div>'
-    +(nextP?'<div class="hint">'+esc(nextP.name)+' 님이 없으면: 사전 당첨자는 [자리 비움], 현장 접수는 [없음 처리]를 누른 뒤 다시 이 버튼을 누르세요.</div>':'')+'</div>';
+    +'<button class="btn b-next'+(A.sel?' picked':'')+'" type="button" data-op="'+(A.sel?'startsel':'next')+'"'+(nextP?'':' disabled')+'>'+(nextP?(A.sel?'✓ ':'')+(d.current.length?'완료 → ':'')+esc(nextP.name)+' 시작':'대기자 없음')+'</button></div>'
+    +(A.sel?'<div class="hint pick">체크한 <b>'+esc(nextP.name)+'</b> 님을 먼저 시작해요. <button class="linkbtn" type="button" data-op="unsel">체크 해제</button></div>'
+      :(nextP?'<div class="hint">다른 사람을 먼저 하려면 대기 명단에서 그 사람을 눌러 ✓ 체크하세요. '+esc(nextP.name)+' 님이 없으면 [자리 비움]·[없음 처리]도 쓸 수 있어요.</div>':''))+'</div>';
 
   h+='<section class="sec"><div class="sechead"><h2>대기 명단</h2><span class="count num">'+d.queue.length+'명</span></div>';
   if(!d.queue.length) h+='<div class="emptybox">대기자가 없어요</div>';
   else{
     h+='<ol class="list admin-list">';
     d.queue.forEach(function(p,i){
-      h+='<li class="item'+(i===0?' first':'')+'"><div class="p num">'+(i+1)+'</div><div class="nm"><b>'+esc(p.name)+'</b><div class="tags">'
+      var on=A.sel&&A.sel.row===p.row&&A.sel.name===p.name;
+      h+='<li class="item'+(i===0?' first':'')+(on?' sel':'')+'"><button class="pick-btn" type="button" data-op="pick" data-row="'+p.row+'" data-name="'+esc(p.name)+'" aria-pressed="'+on+'" aria-label="'+esc(p.name)+' 체크"><span class="ck" aria-hidden="true"></span><span class="p num">'+(i+1)+'</span></button>'
+        +'<div class="nm" data-op="pick" data-row="'+p.row+'" data-name="'+esc(p.name)+'"><b>'+esc(p.name)+'</b><div class="tags">'
         +(p.kind==='사전신청'?'<span class="tag pre">사전 당첨</span>':'<span class="tag">현장 접수</span>')+'</div></div>'
         +'<div class="acts">'
         +'<button class="btn sm start" type="button" data-op="start" data-row="'+p.row+'" data-name="'+esc(p.name)+'">시작</button>'
@@ -624,6 +645,8 @@ function renderAdmin(){
     +'<div class="reset-row"><button class="btn sm reset" type="button" data-op="reset" data-mode="keepwin">당첨자만 남기고 초기화</button>'
     +'<button class="btn sm reset" type="button" data-op="reset" data-mode="all">전부 초기화</button></div></div>';
   h+='<div class="guide"><div>· 버튼을 누르면 손님 화면에 15초 안에 반영돼요.</div><div>· 구글 시트에서 직접 고쳐도 돼요.</div></div>';
+  /* 체크한 사람이 있으면 화면 아래에 고정 버튼이 떠요 (스크롤 안 올려도 바로 시작) */
+  if(A.sel&&nextP) h+='<div class="selbar"><button class="btn b-next picked" type="button" data-op="startsel">✓ '+(d.current.length?'완료 → ':'')+esc(nextP.name)+' 시작</button><button class="btn sm mv" type="button" data-op="unsel">해제</button></div>';
   h+='<div class="foot"><button class="linkbtn" type="button" data-op="logout">관리자 로그아웃</button><span class="num">'+hms(Date.now())+' 기준</span></div>';
 
   var keep=document.activeElement&&document.activeElement.id; var kv=keep&&document.getElementById(keep)?document.getElementById(keep).value:null;
@@ -657,6 +680,8 @@ function bindAdmin(){
     var op=b.getAttribute('data-op'), row=b.getAttribute('data-row'), nm=b.getAttribute('data-name');
     if(op==='logout'){store('adminPin',null);A.pin='';A.state=null;renderAdmin();return;}
     if(op==='undo'){ adminDo({op:'undo'}); return; }
+    if(op==='pick'){ var pr=+row; A.sel=(A.sel&&A.sel.row===pr&&A.sel.name===nm)?null:{row:pr,name:nm}; renderAdmin(); return; }
+    if(op==='unsel'){ A.sel=null; renderAdmin(); return; }
     if(op==='reset'){
       var md=b.getAttribute('data-mode'), key='reset-'+md, orig=b.textContent;
       if(!A.armed[key]){ A.armed[key]=1; b.classList.add('armed'); b.textContent='한 번 더 누르면 실행'; setTimeout(function(){ delete A.armed[key]; if(b.isConnected){ b.classList.remove('armed'); b.textContent=orig; } },3000); return; }
@@ -669,6 +694,7 @@ function bindAdmin(){
     if(op==='status') adminDo({op:'status',value:b.getAttribute('data-v')},b.textContent+'(으)로 바꿨어요');
     if(op==='done') adminDo({op:'done'},'완료 처리했어요');
     if(op==='next') adminDo({op:'next'},'다음 분을 시작했어요');
+    if(op==='startsel'&&A.sel){ var sn=A.sel.name; adminDo({op:'start',row:A.sel.row,name:sn},sn+' 님 그리기 시작'); A.sel=null; }
     if(op==='start') adminDo({op:'start',row:row,name:nm},nm+' 님 그리기 시작');
     if(op==='back') adminDo({op:'back',row:row,name:nm},nm+' 님을 대기로 돌려놨어요');
     if(op==='hold') adminDo({op:'hold',row:row,name:nm},nm+' 님 자리 비움 — 다음 분 진행하세요');
