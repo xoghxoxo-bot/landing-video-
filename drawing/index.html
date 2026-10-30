@@ -162,6 +162,8 @@ input[type=text]{border:1px solid var(--line);background:var(--surface);border-r
 .count-now .v{font-family:var(--display);font-size:56px;line-height:.9;color:var(--gold)}
 .count-now .v small{font-family:var(--body);font-size:16px;color:var(--stage-ink);margin-left:4px}
 .hint{font-size:12.5px;color:var(--muted)}
+.notice-box{background:var(--warn-soft);border-radius:14px;padding:12px 14px;font-size:13.5px;line-height:1.6;display:flex;flex-direction:column;gap:2px}
+.notice-box b:first-child{color:var(--warn);font-size:14px;margin-bottom:2px}
 .success{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:10px 0}
 .success svg{width:84px;height:84px}
 .success circle{fill:none;stroke:var(--ok);stroke-width:5;stroke-dasharray:240;stroke-dashoffset:240;animation:draw .5s ease-out forwards}
@@ -299,8 +301,12 @@ function cell(r,i){var c=r&&r.c&&r.c[i]; if(!c) return ''; return c.v==null?(c.f
 function shape(rows,status,notice){
   var current=rows.filter(function(p){return p.st==='그리는중';});
   var done=rows.filter(function(p){return p.st==='완료';});
-  var queue=rows.filter(function(p){return p.st!=='그리는중'&&p.st!=='완료';});
-  return {rows:rows,current:current,done:done,queue:queue,status:STKEY[status]||'open',notice:notice||''};
+  /* 대기 순서: 사전 당첨자가 항상 먼저, 그다음 현장 접수 (각각 시트 줄 순서) */
+  var wait=rows.filter(function(p){return p.st==='대기'||!p.st;});
+  var queue=wait.filter(function(p){return p.kind==='사전신청';}).concat(wait.filter(function(p){return p.kind!=='사전신청';}));
+  var held=rows.filter(function(p){return p.st==='자리비움';});
+  var noshow=rows.filter(function(p){return p.st==='불참';});
+  return {rows:rows,current:current,done:done,queue:queue,held:held,noshow:noshow,status:STKEY[status]||'open',notice:notice||''};
 }
 function refresh(){
   return Promise.all([sheet('대기열',1),sheet('설정',0)]).then(function(t){
@@ -316,6 +322,8 @@ function findMe(name){
   if(!data||!name) return null; var q=norm(name), i;
   for(i=0;i<data.queue.length;i++) if(norm(data.queue[i].name)===q) return {pos:i+1,name:data.queue[i].name};
   if(data.current.some(function(p){return norm(p.name)===q;})) return {drawing:true,name:name};
+  if(data.held.some(function(p){return norm(p.name)===q;})) return {hold:true,name:name};
+  if(data.noshow.some(function(p){return norm(p.name)===q;})) return {noshow:true,name:name};
   if(data.done.some(function(p){return norm(p.name)===q;})) return {done:true,name:name};
   for(i=0;i<data.queue.length;i++) if(norm(data.queue[i].name).indexOf(q)>-1) return {pos:i+1,name:data.queue[i].name};
   return null;
@@ -327,6 +335,10 @@ function mineCard(m, forgettable){
     h+='<div class="sub">'+(m.pos===1?'다음 순서예요! 부스 앞에서 기다려 주세요':'앞에 '+(m.pos-1)+'명이 기다리고 있어요')+'</div>';
   } else if(m.drawing){
     h+='<div class="who">'+esc(m.name)+' 님</div><div class="pos word">지금 그리고 있어요!</div>';
+  } else if(m.hold){
+    h+='<div class="who">'+esc(m.name)+' 님</div><div class="pos word">잠시 자리 비움</div><div class="sub">부스로 오시면 사전 당첨자라 바로 우선 진행해요</div>';
+  } else if(m.noshow){
+    h+='<div class="who">'+esc(m.name)+' 님</div><div class="pos word">순서가 지나갔어요</div><div class="sub">호명 때 안 계셔서 다음 분이 먼저 진행했어요. 다시 신청하시면 맨 뒤로 들어가요.</div>';
   } else if(m.done){
     h+='<div class="who">'+esc(m.name)+' 님</div><div class="pos word">완료됐어요</div><div class="sub">참여해 주셔서 고마워요!</div>';
   }
@@ -357,7 +369,7 @@ function renderGuest(){
   if(mine) h+=mineCard(mine,true);
 
   if(d.status==='closed') h+='<button class="btn cta" type="button" disabled>오늘 접수가 마감됐어요</button>';
-  else if(!(mine&&(mine.pos||mine.drawing))) h+='<button class="btn cta glow" type="button" data-act="open">지금 신청하기 <span class="arrow">→</span></button><div class="cta-sub">이름만 입력하면 바로 대기열에 들어가요</div>';
+  else if(!(mine&&(mine.pos||mine.drawing||mine.hold))) h+='<button class="btn cta glow" type="button" data-act="open">지금 신청하기 <span class="arrow">→</span></button><div class="cta-sub">이름만 입력하면 바로 대기열에 들어가요</div>';
 
   h+='<section class="lookup"><h2>내 순번 조회</h2><div class="row-in"><input type="text" id="look" placeholder="신청한 이름" autocomplete="off" enterkeyhint="search" value="'+esc(lookVal)+'"><button class="btn ghost" type="button" data-act="look">조회</button></div><div class="lookres" id="lookres">'+lookRes+'</div></section>';
 
@@ -368,17 +380,18 @@ function renderGuest(){
     d.queue.forEach(function(p,i){
       var me=mine&&mine.pos===i+1;
       h+='<li class="item'+(i===0?' first':'')+(me?' me':'')+'"><div class="p num">'+(i+1)+'</div><div class="nm"><b>'+esc(p.name)+'</b><div class="tags">'
-        +(p.kind==='사전신청'?'<span class="tag pre">사전 신청</span>':'<span class="tag">현장 접수</span>')+'</div></div>'
+        +(p.kind==='사전신청'?'<span class="tag pre">사전 당첨</span>':'<span class="tag">현장 접수</span>')+'</div></div>'
         +(i===0?'<span class="tag next">다음 순서</span>':'')+'</li>';
     });
     h+='</ol>';
   }
+  if(d.held.length) h+='<div class="hint">사전 당첨자 '+d.held.length+'명이 잠시 자리를 비웠어요. 돌아오면 우선 진행돼서 현장 접수 순번이 그만큼 뒤로 밀릴 수 있어요.</div>';
   h+='</section>';
   if(d.done.length){
     h+='<section class="sec"><div class="sechead"><h2>완료</h2><span class="count num">'+d.done.length+'명</span></div><div class="done">';
     d.done.slice().reverse().forEach(function(p){h+='<span>'+esc(p.name)+'</span>';}); h+='</div></section>';
   }
-  h+='<div class="guide"><div>· 초상화는 한 번에 한 분씩 그려요.</div><div>· 차례가 가까우면 부스 근처에 계셔 주세요.</div></div>';
+  h+='<div class="guide"><div>· 초상화는 한 번에 한 분씩 그려요.</div><div>· 미리 당첨된 사전 당첨자 분들은 우선 진행돼요. 그래서 현장 접수 순번은 뒤로 밀릴 수 있어요.</div><div>· 호명했을 때 부스에 안 계시면 다음 분이 먼저 진행해요. 이때는 다시 신청하셔야 하고 순번은 맨 뒤로 가요.</div></div>';
   h+='<div class="foot"><a href="'+INSTA+'" target="_blank" rel="noopener">@bjj_artist</a><span>BJJ ARTIST</span></div>';
   app.innerHTML=h;
   if(focusLook){var li=document.getElementById('look'); li.focus(); try{li.setSelectionRange(li.value.length,li.value.length);}catch(e){}}
@@ -396,7 +409,8 @@ var sheetEl=document.getElementById('sheet'), sheetBody=document.getElementById(
 function openSheet(){
   sheetBody.innerHTML='<div class="count-now"><div class="k">현재 대기 인원</div><div class="v num" id="sc">'+(data?data.queue.length:0)+'<small>명</small></div></div>'
     +'<form id="joinform" novalidate><div class="row-in"><input type="text" id="jname" maxlength="20" placeholder="이름 또는 닉네임" autocomplete="off" enterkeyhint="done"><button class="btn go" type="submit" id="jbtn">입력</button></div></form>'
-    +'<div class="hint">입력한 이름은 대기 명단에 공개돼요. 닉네임도 괜찮아요.</div><div id="jmsg"></div>';
+    +'<div class="hint">입력한 이름은 대기 명단에 공개돼요. 닉네임도 괜찮아요.</div><div id="jmsg"></div>'
+    +'<div class="notice-box"><b>신청 전에 꼭 읽어 주세요</b><div>· 호명했을 때 부스에 안 계시면 다음 분이 먼저 진행해요.</div><div>· 그 경우 다시 신청해 주셔야 하고, 순번은 <b>맨 뒤로</b> 가요.</div><div>· 미리 당첨된 사전 당첨자 분들이 우선 진행돼서 순번이 뒤로 밀릴 수 있어요.</div><div>양해 부탁드려요. 차례가 가까우면 부스 근처에 계셔 주세요!</div></div>';
   sheetEl.hidden=false; requestAnimationFrame(function(){requestAnimationFrame(function(){sheetEl.classList.add('open');});});
   setTimeout(function(){var i=document.getElementById('jname'); if(i) i.focus();},380);
 }
@@ -413,7 +427,7 @@ function submitJoin(e){
     store('myName',r.name);
     sheetBody.innerHTML='<div class="success"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="37"/><polyline points="26,44 37,55 59,31"/></svg>'
       +'<div class="t1">'+esc(r.name)+' 님, '+(r.already?'이미 같은 이름으로 신청돼 있어요':'신청 완료!')+'</div>'
-      +(r.drawing?'<div class="t2">지금 그리고 있어요</div>':'<div class="t2"><span class="n num">'+r.pos+'</span>번째 순서예요</div>')
+      +(r.drawing?'<div class="t2">지금 그리고 있어요</div>':r.hold?'<div class="t2">잠시 자리 비움 상태예요</div><div class="hint">부스에 말씀해 주시면 바로 우선 진행해요</div>':'<div class="t2"><span class="n num">'+r.pos+'</span>번째 순서예요</div>')
       +'<div class="hint">'+(r.already?'다른 분이라면 이름 뒤에 숫자나 닉네임을 붙여서 다시 신청해 주세요':'이 화면을 다시 열면 내 순번이 맨 위에 보여요')+'</div></div>'
       +'<button class="btn cta" type="button" data-close>내 순번 보러 가기</button>';
     if(!r.already) confetti();
@@ -489,7 +503,7 @@ function renderAdmin(){
   var nextP=d.queue[0];
   h+='<div class="two"><button class="btn b-done" type="button" data-op="done"'+(d.current.length?'':' disabled')+'>완료</button>'
     +'<button class="btn b-next" type="button" data-op="next"'+(nextP?'':' disabled')+'>'+(nextP?(d.current.length?'완료 → ':'')+esc(nextP.name)+' 시작':'대기자 없음')+'</button></div>'
-    +(nextP?'<div class="hint">'+esc(nextP.name)+' 님이 자리에 없으면 명단에서 [↓ 한 칸 뒤로]를 누르거나, 올 수 있는 사람 옆 [시작]을 누르세요.</div>':'')+'</div>';
+    +(nextP?'<div class="hint">'+esc(nextP.name)+' 님이 없으면: 사전 당첨자는 [자리 비움], 현장 접수는 [없음 처리]를 누른 뒤 다시 이 버튼을 누르세요.</div>':'')+'</div>';
 
   h+='<section class="sec"><div class="sechead"><h2>대기 명단</h2><span class="count num">'+d.queue.length+'명</span></div>';
   if(!d.queue.length) h+='<div class="emptybox">대기자가 없어요</div>';
@@ -497,20 +511,28 @@ function renderAdmin(){
     h+='<ol class="list admin-list">';
     d.queue.forEach(function(p,i){
       h+='<li class="item'+(i===0?' first':'')+'"><div class="p num">'+(i+1)+'</div><div class="nm"><b>'+esc(p.name)+'</b><div class="tags">'
-        +(p.kind==='사전신청'?'<span class="tag pre">사전 신청</span>':'<span class="tag">현장 접수</span>')+'</div></div>'
+        +(p.kind==='사전신청'?'<span class="tag pre">사전 당첨</span>':'<span class="tag">현장 접수</span>')+'</div></div>'
         +'<div class="acts">'
         +'<button class="btn sm start" type="button" data-op="start" data-row="'+p.row+'" data-name="'+esc(p.name)+'">시작</button>'
-        +'<button class="btn sm mv" type="button" data-op="move" data-dir="up" data-row="'+p.row+'" data-name="'+esc(p.name)+'"'+(i===0?' disabled':'')+' aria-label="한 칸 위로">↑</button>'
-        +'<button class="btn sm mv" type="button" data-op="move" data-dir="down" data-row="'+p.row+'" data-name="'+esc(p.name)+'"'+(i===d.queue.length-1?' disabled':'')+'>↓ 한 칸 뒤로</button>'
-        +'<button class="btn sm mv" type="button" data-op="move" data-dir="top" data-row="'+p.row+'" data-name="'+esc(p.name)+'"'+(i===0?' disabled':'')+'>맨 앞으로</button>'
+        +(p.kind==='사전신청'
+          ?'<button class="btn sm mv" type="button" data-op="hold" data-row="'+p.row+'" data-name="'+esc(p.name)+'">자리 비움</button>'
+          :'<button class="btn sm mv" type="button" data-op="noshow" data-row="'+p.row+'" data-name="'+esc(p.name)+'">없음 처리</button>')
         +'<button class="btn sm del" type="button" data-op="delete" data-row="'+p.row+'" data-name="'+esc(p.name)+'">삭제</button></div></li>';
     });
     h+='</ol>';
   }
   h+='</section>';
+  if(d.held.length){
+    h+='<section class="sec"><div class="sechead"><h2>자리 비운 사전 당첨자</h2><span class="count num">'+d.held.length+'명</span></div><ol class="list admin-list">';
+    d.held.forEach(function(p){
+      h+='<li class="item"><div class="p num" style="font-size:18px;color:var(--muted)">⏸</div><div class="nm"><b>'+esc(p.name)+'</b><div class="tags"><span class="tag pre">사전 당첨</span></div></div>'
+        +'<div class="acts"><button class="btn sm start" type="button" data-op="return" data-row="'+p.row+'" data-name="'+esc(p.name)+'">돌아옴 → 맨 앞 그룹으로</button></div></li>';
+    });
+    h+='</ol></section>';
+  }
 
   h+='<div class="box"><h3>직접 추가</h3><div class="kind">'
-    +'<button type="button" data-kind="현장" aria-pressed="'+(A.kind==='현장')+'">현장 접수</button><button type="button" data-kind="사전신청" aria-pressed="'+(A.kind==='사전신청')+'">사전 신청</button></div>'
+    +'<button type="button" data-kind="현장" aria-pressed="'+(A.kind==='현장')+'">현장 접수</button><button type="button" data-kind="사전신청" aria-pressed="'+(A.kind==='사전신청')+'">사전 당첨</button></div>'
     +'<form class="row-in" id="addform"><input type="text" id="addname" maxlength="20" placeholder="이름" autocomplete="off"><button class="btn go" type="submit">추가</button></form></div>';
 
   h+='<div class="box"><h3>공지 한 줄 (비우고 저장하면 숨겨져요)</h3><form class="row-in" id="noticeform"><input type="text" id="notice" maxlength="200" value="'+esc(s.notice)+'" placeholder="예: 12시~12시 30분 점심시간이에요"><button class="btn ghost" type="submit">저장</button></form></div>';
@@ -521,6 +543,13 @@ function renderAdmin(){
       h+='<li class="item"><div class="p num" style="font-size:18px;color:var(--muted)">✓</div><div class="nm"><b>'+esc(p.name)+'</b></div><div class="acts"><button class="btn sm back" type="button" data-op="back" data-row="'+p.row+'" data-name="'+esc(p.name)+'">대기로 되돌리기</button></div></li>';
     });
     h+='</ol></section>';
+  }
+  if(d.noshow.length){
+    h+='<section class="sec"><div class="sechead"><h2>호명 때 없던 현장 접수</h2><span class="count num">'+d.noshow.length+'명</span></div><ol class="list">';
+    d.noshow.slice().reverse().forEach(function(p){
+      h+='<li class="item"><div class="p num" style="font-size:18px;color:var(--muted)">–</div><div class="nm"><b>'+esc(p.name)+'</b></div><div class="acts"><button class="btn sm back" type="button" data-op="return" data-row="'+p.row+'" data-name="'+esc(p.name)+'">실수였어요 · 원래 자리로</button></div></li>';
+    });
+    h+='</ol><div class="hint">이분들은 손님 화면에 "순서가 지나갔어요, 다시 신청하면 맨 뒤"로 보여요.</div></section>';
   }
   h+='<div class="guide"><div>· 버튼을 누르면 손님 화면에 15초 안에 반영돼요.</div><div>· 구글 시트에서 직접 고쳐도 돼요.</div></div>';
   h+='<div class="foot"><button class="linkbtn" type="button" data-op="logout">관리자 로그아웃</button><span class="num">'+hms(Date.now())+' 기준</span></div>';
@@ -564,6 +593,9 @@ function bindAdmin(){
     if(op==='next') adminDo({op:'next'},'다음 분을 시작했어요');
     if(op==='start') adminDo({op:'start',row:row,name:nm},nm+' 님 그리기 시작');
     if(op==='back') adminDo({op:'back',row:row,name:nm},nm+' 님을 대기로 돌려놨어요');
+    if(op==='hold') adminDo({op:'hold',row:row,name:nm},nm+' 님 자리 비움 — 다음 분 진행하세요');
+    if(op==='noshow') adminDo({op:'noshow',row:row,name:nm},nm+' 님 없음 처리 — 다시 신청하면 맨 뒤');
+    if(op==='return') adminDo({op:'return',row:row,name:nm},nm+' 님 대기로 돌아왔어요');
     if(op==='move'){ var dir=b.getAttribute('data-dir'); adminDo({op:'move',row:row,name:nm,dir:dir},nm+' 님 '+({up:'한 칸 위로',down:'한 칸 뒤로',top:'맨 앞으로'})[dir]); }
   });
   renderAdmin();
