@@ -215,6 +215,9 @@ input[type=text]{border:1px solid var(--line);background:var(--surface);border-r
 .kind{display:flex;gap:6px}
 .kind button{flex:1;min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-weight:500}
 .kind button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.reset-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sm.reset{min-height:48px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink)}
+.sm.reset.armed{background:var(--live);color:#fff;box-shadow:none}
 .pin{max-width:320px;width:100%;margin:40px auto 0;display:flex;flex-direction:column;gap:12px;text-align:center}
 .pin input{text-align:center;letter-spacing:.4em;font-size:24px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:calc(100% - 32px);background:var(--ink);color:var(--paper);padding:11px 16px;border-radius:12px;font-size:14px;z-index:70;box-shadow:0 6px 24px rgba(0,0,0,.2)}
@@ -570,6 +573,10 @@ function renderAdmin(){
     });
     h+='</ol><div class="hint">이분들은 손님 화면에 "순서가 지나갔어요, 다시 신청하면 맨 뒤"로 보여요.</div></section>';
   }
+  h+='<div class="box"><h3>테스트 끝나고 초기화</h3>'
+    +'<div class="hint">두 번 눌러야 실행돼요. 잘못 눌러도 맨 위 ↶ 되돌리기로 복구할 수 있어요. 진행 상태는 [진행 중], 공지는 비워져요.</div>'
+    +'<div class="reset-row"><button class="btn sm reset" type="button" data-op="reset" data-mode="keepwin">당첨자만 남기고 초기화</button>'
+    +'<button class="btn sm reset" type="button" data-op="reset" data-mode="all">전부 초기화</button></div></div>';
   h+='<div class="guide"><div>· 버튼을 누르면 손님 화면에 15초 안에 반영돼요.</div><div>· 구글 시트에서 직접 고쳐도 돼요.</div></div>';
   h+='<div class="foot"><button class="linkbtn" type="button" data-op="logout">관리자 로그아웃</button><span class="num">'+hms(Date.now())+' 기준</span></div>';
 
@@ -604,6 +611,11 @@ function bindAdmin(){
     var op=b.getAttribute('data-op'), row=b.getAttribute('data-row'), nm=b.getAttribute('data-name');
     if(op==='logout'){store('adminPin',null);A.pin='';A.state=null;renderAdmin();return;}
     if(op==='undo'){ adminDo({op:'undo'}); return; }
+    if(op==='reset'){
+      var md=b.getAttribute('data-mode'), key='reset-'+md, orig=b.textContent;
+      if(!A.armed[key]){ A.armed[key]=1; b.classList.add('armed'); b.textContent='한 번 더 누르면 실행'; setTimeout(function(){ delete A.armed[key]; if(b.isConnected){ b.classList.remove('armed'); b.textContent=orig; } },3000); return; }
+      delete A.armed[key]; adminDo({op:'reset',mode:md}, md==='keepwin'?'초기화했어요 (사전 당첨자만 남김)':'전부 초기화했어요'); return;
+    }
     if(op==='delete'){
       if(!A.armed[row]){A.armed[row]=1;b.classList.add('armed');b.textContent='한 번 더';setTimeout(function(){delete A.armed[row];if(b.isConnected){b.classList.remove('armed');b.textContent='삭제';}},3000);return;}
       delete A.armed[row]; adminDo({op:'delete',row:row,name:nm},nm+' 님을 삭제했어요'); return;
